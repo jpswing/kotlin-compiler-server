@@ -89,16 +89,21 @@ class KotlinCompiler(
   }
 
   @OptIn(ExperimentalPathApi::class)
-  fun compile(files: List<KtFile>): CompilationResult<JvmClasses> = usingTempDirectory { inputDir ->
+  fun compile(files: List<KtFile>, additionalClasspath: String = ""): CompilationResult<JvmClasses> = usingTempDirectory { inputDir ->
     val ioFiles = files.writeToIoFiles(inputDir)
     usingTempDirectory { outputDir ->
+      val baseClasspath = kotlinEnvironment.classpath.joinToString(PATH_SEPARATOR) { it.absolutePath }
+      val fullClasspath = listOf(baseClasspath, additionalClasspath)
+            .filter { it.isNotEmpty() }
+            .joinToString(PATH_SEPARATOR)
+
       val arguments = ioFiles.map { it.absolutePathString() } + KotlinEnvironment.additionalCompilerArguments + listOf(
-        "-cp", kotlinEnvironment.classpath.joinToString(PATH_SEPARATOR) { it.absolutePath },
+        "-cp", fullClasspath,
         "-module-name", "web-module",
         "-no-stdlib", "-no-reflect",
-        "-progressive",
         "-d", outputDir.absolutePathString(),
       ) + kotlinEnvironment.compilerPlugins.map { plugin -> "-Xplugin=${plugin.absolutePath}" }
+      println(arguments)
       K2JVMCompiler().tryCompilation(inputDir, ioFiles, arguments) {
         val outputFiles = buildMap {
           outputDir.visitFileTree {
