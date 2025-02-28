@@ -103,7 +103,6 @@ class KotlinCompiler(
         "-no-stdlib", "-no-reflect",
         "-d", outputDir.absolutePathString(),
       ) + kotlinEnvironment.compilerPlugins.map { plugin -> "-Xplugin=${plugin.absolutePath}" }
-      println(arguments)
       K2JVMCompiler().tryCompilation(inputDir, ioFiles, arguments) {
         val outputFiles = buildMap {
           outputDir.visitFileTree {
