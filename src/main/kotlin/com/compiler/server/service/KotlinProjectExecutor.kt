@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.psi.KtFile
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import java.io.File
 
 @Component
 class KotlinProjectExecutor(
@@ -45,7 +46,7 @@ class KotlinProjectExecutor(
     val files = kotlinEnvironment.environment { environment ->
       getFilesFrom(project, environment).map { it.kotlinFile }
     }
-    return kotlinCompiler.compile(files)
+    return kotlinCompiler.compile(files, project.addClasspath)
   }
 
   fun convertToWasm(project: Project, debugInfo: Boolean): TranslationResultWithJsCode {
@@ -82,7 +83,54 @@ class KotlinProjectExecutor(
     CompilerDiagnostics(emptyMap())
   }
 
+  fun compile(project: Project, outputDir: String): CompilationResponse {
+      return when (val result = compileToJvm(project)) {
+          is Compiled -> {
+              saveClassesToDirectory(result.result.files, outputDir)
+              CompilationResponse(success = true)
+          }
+          is NotCompiled -> {
+              saveErrorsToFile(result.compilerDiagnostics, outputDir)
+              CompilationResponse(success = false)
+          }
+      }
+  }
+
   fun getVersion() = version
+
+  private fun saveClassesToDirectory(files: Map<String, ByteArray>, outputDirPath: String) {
+      val outputDir = File(outputDirPath).apply { mkdirs() }
+      files.forEach { (relativePath, bytes) ->
+          File(outputDir, relativePath).apply {
+              parentFile.mkdirs()
+              writeBytes(bytes)
+          }
+      }
+  }
+
+  private fun saveErrorsToFile(diagnostics: CompilerDiagnostics, outputDirPath: String) {
+      val errorLines = diagnostics.map.flatMap { (filename, errors) ->
+          errors.map { error ->
+              val lineStart = error.interval?.start
+              val line = lineStart?.line
+              val column = lineStart?.ch
+              
+              buildString {
+                  append(filename)
+                  line?.let { 
+                      append(":${it + 1}")  // 转换为1-based行号
+                      column?.let { append(":${it + 1}") } // 转换为1-based列号
+                  }
+                  append(": ${error.severity.name}: ${error.message}")
+              }
+          }
+      }
+
+      File(outputDirPath).apply { mkdirs() }
+          .resolve("compile.err")
+          .apply { parentFile.mkdirs() }
+          .writeText(errorLines.joinToString("\n"))
+  }
 
   private fun convertJsWithConverter(
     project: Project,
