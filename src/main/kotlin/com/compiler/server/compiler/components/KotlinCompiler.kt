@@ -105,14 +105,20 @@ class KotlinCompiler(
         }
     }
 
-    fun compile(files: List<ProjectFile>, userCompilerArguments: Map<String, Any>): CompilationResult<JvmClasses> =
+    fun compile(
+        files: List<ProjectFile>,
+        userCompilerArguments: Map<String, Any>,
+        additionalClasspath: List<String> = emptyList(),
+    ): CompilationResult<JvmClasses> =
         usingTempDirectory { inputDir ->
             val ioFiles = files.writeToIoFiles(inputDir)
             usingTempDirectory { outputDir ->
+                val classpath = (kotlinEnvironment.classpath.map { it.absolutePath } + additionalClasspath)
+                    .joinToString(PATH_SEPARATOR)
                 val arguments = ioFiles.map { it.absolutePathString() } +
                         compilerArgumentsUtil.convertCompilerArgumentsToCompilationString(
                             jvmCompilerArguments,
-                            compilerArgumentsUtil.PREDEFINED_JVM_ARGUMENTS,
+                            compilerArgumentsUtil.PREDEFINED_JVM_ARGUMENTS + ("classpath" to classpath),
                             userCompilerArguments
                         )
                 val result = compileWithToolchain(inputDir, outputDir, arguments)

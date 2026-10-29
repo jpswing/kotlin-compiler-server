@@ -1,11 +1,14 @@
 package com.compiler.server.controllers
 
+import com.compiler.server.api.CompileRequest
 import com.compiler.server.api.CompilerArgumentResponse
 import com.compiler.server.api.RunRequest
 import com.compiler.server.api.TestRequest
 import com.compiler.server.api.TranslateComposeWasmRequest
 import com.compiler.server.api.TranslateJsRequest
 import com.compiler.server.api.TranslateWasmRequest
+import com.compiler.server.common.components.PATH_SEPARATOR
+import com.compiler.server.model.CompilationResponse
 import com.compiler.server.model.CompilerDiagnostics
 import com.compiler.server.model.ExecutionResult
 import com.compiler.server.model.KotlinTranslatableCompiler
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import kotlin.io.path.Path
 
 @RestController
 @RequestMapping(value = ["/api/compiler", "/api/**/compiler"])
@@ -44,6 +48,18 @@ class CompilerRestController(
                 files = request.files.map { ProjectFile(name = it.name, text = it.text) },
                 compilerArguments = listOf(request.compilerArguments)
             ), addByteCode
+        )
+    }
+
+    @PostMapping("/compile")
+    fun compileKotlinProjectEndpoint(
+        @RequestBody request: CompileRequest,
+        @RequestParam outputDir: String,
+    ): CompilationResponse {
+        return kotlinProjectExecutor.compile(
+            files = request.files.map { ProjectFile(name = it.name, text = it.text) },
+            additionalClasspath = request.addClasspath.split(PATH_SEPARATOR).filter { it.isNotEmpty() },
+            outputDir = Path(outputDir),
         )
     }
 

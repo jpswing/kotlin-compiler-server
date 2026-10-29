@@ -8,6 +8,11 @@ import com.compiler.server.model.JsCompilerArguments
 import com.compiler.server.model.bean.VersionInfo
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import java.nio.file.Path
+import kotlin.io.path.createDirectories
+import kotlin.io.path.div
+import kotlin.io.path.writeBytes
+import kotlin.io.path.writeText
 
 @Component
 class KotlinProjectExecutor(
@@ -49,6 +54,31 @@ class KotlinProjectExecutor(
 
     fun compileToJvm(project: Project): CompilationResult<KotlinCompiler.JvmClasses> {
         return kotlinCompiler.compile(project.files, project.compilerArguments.getOrElse(0, { emptyMap() }))
+    }
+
+    fun compile(files: List<ProjectFile>, additionalClasspath: List<String>, outputDir: Path): CompilationResponse {
+        outputDir.createDirectories()
+        return when (val result = kotlinCompiler.compile(files, mapOf("progressive" to false), additionalClasspath)) {
+            is Compiled -> {
+                result.result.files.forEach { (relativePath, bytes) ->
+                    val file = outputDir / relativePath
+                    file.parent.createDirectories()
+                    file.writeBytes(bytes)
+                }
+                CompilationResponse(success = true)
+            }
+
+            is NotCompiled -> {
+                val errors = result.compilerDiagnostics.map.flatMap { (fileName, descriptors) ->
+                    descriptors.map { descriptor ->
+                        val position = descriptor.interval?.start?.let { ":${it.line + 1}:${it.ch + 1}" } ?: ""
+                        "$fileName$position: ${descriptor.severity.name}: ${descriptor.message}"
+                    }
+                }
+                (outputDir / "compile.err").writeText(errors.joinToString("\n"))
+                CompilationResponse(success = false)
+            }
+        }
     }
 
     fun convertToWasm(
